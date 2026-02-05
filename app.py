@@ -1,3 +1,5 @@
+# source venv/bin/activate
+# streamlit run app.py 
 import streamlit as st
 import ccxt
 import pandas as pd
@@ -160,8 +162,8 @@ def fetch_live_price(exchange_id, coin):
                     return {"Exchange": exchange_id.title(), "Price ($)": price}
             except:
                 continue
-    except:
-        pass
+    except Exception as e:
+        return {"Exchange": exchange_id.title(), "Error": str(e)}
     return None
 
 # --- LAYOUT SETUP ---
@@ -176,7 +178,7 @@ historical_container = st.container()
 with header_container:
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.title("💎 Global Crypto Scanner")
+        st.title("Global Crypto Scanner")
         st.caption("Real-time arbitrage opportunities across major exchanges.")
     st.divider()
 
@@ -275,10 +277,20 @@ while True:
             if res:
                 live_data.append(res)
             
-    # Update the container
+            # Update the container
     with live_placeholder.container():
-        if live_data:
-            df = pd.DataFrame(live_data)
+        # Separate valid data from errors
+        valid_data = [d for d in live_data if "Error" not in d]
+        errors = [d for d in live_data if "Error" in d]
+
+        # Display errors first if any (useful for debugging)
+        if errors:
+            with st.expander("⚠️ Connection Issues / Debug Log", expanded=True):
+                for err in errors:
+                    st.error(f"**{err['Exchange']}**: {err['Error']}")
+
+        if valid_data:
+            df = pd.DataFrame(valid_data)
             df_sorted = df.sort_values(by="Price ($)", ascending=True).reset_index(drop=True)
             
             best_price = df_sorted.iloc[0]['Price ($)']
