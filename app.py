@@ -154,14 +154,20 @@ def fetch_live_price(exchange_id, coin):
         exchange = exchange_class({'enableRateLimit': True})
         
         symbols = [f"{coin}/USDT", f"{coin}/USD", f"{coin}/USDC"]
+        errors_list = []
         for symbol in symbols:
             try:
                 ticker = exchange.fetch_ticker(symbol)
                 price = ticker['ask'] if ticker['ask'] else ticker['last']
                 if price:
                     return {"Exchange": exchange_id.title(), "Price ($)": price}
-            except:
+            except Exception as e:
+                errors_list.append(f"{symbol}: {str(e)}")
                 continue
+        
+        if errors_list:
+             return {"Exchange": exchange_id.title(), "Error": " | ".join(errors_list)}
+             
     except Exception as e:
         return {"Exchange": exchange_id.title(), "Error": str(e)}
     return None
