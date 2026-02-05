@@ -112,16 +112,30 @@ def fetch_historical_6_months(coin):
             if not ex.has['fetchOHLCV']:
                 continue
             
-            # Try USDT then USD
-            ohlcv = None
-            try:
-                ohlcv = ex.fetch_ohlcv(f"{coin}/USDT", timeframe=timeframe, limit=limit)
-            except:
+            # Helper to try fetching OHLCV
+            def try_fetch_ohlcv(exchange_obj, coin_symbol):
+                timeframe_l = '1d'
+                limit_l = 180
                 try:
-                    ohlcv = ex.fetch_ohlcv(f"{coin}/USD", timeframe=timeframe, limit=limit)
+                    return exchange_obj.fetch_ohlcv(f"{coin_symbol}/USDT", timeframe=timeframe_l, limit=limit_l)
+                except:
+                    try:
+                        return exchange_obj.fetch_ohlcv(f"{coin_symbol}/USD", timeframe=timeframe_l, limit=limit_l)
+                    except:
+                        return None
+
+            ohlcv = try_fetch_ohlcv(ex, coin)
+            
+            # Fallback for Binance Geo-Restriction
+            if not ohlcv and ex_name == 'binance':
+                try:
+                    ex_us = ccxt.binanceus()
+                    ohlcv = try_fetch_ohlcv(ex_us, coin)
+                    if ohlcv:
+                        ex_name = "Binance US" # Update name regarding the fallback
                 except:
                     pass
-            
+
             if ohlcv:
                 df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
                 df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
@@ -166,7 +180,24 @@ def fetch_live_price(exchange_id, coin):
                 continue
         
         if errors_list:
-             return {"Exchange": exchange_id.title(), "Error": " | ".join(errors_list)}
+             # FALLBACK FOR BINANCE (Geo-Restriction typically returns 451 or "restricted")
+             error_str = " | ".join(errors_list)
+             if exchange_id == 'binance' and ("restricted" in error_str.lower() or "451" in error_str):
+                 try:
+                     # Attempt Binance US
+                     exchange_us = ccxt.binanceus({'enableRateLimit': True})
+                     for symbol in symbols:
+                         try:
+                             ticker = exchange_us.fetch_ticker(symbol)
+                             price = ticker['ask'] if ticker['ask'] else ticker['last']
+                             if price:
+                                 return {"Exchange": "Binance US", "Price ($)": price}
+                         except:
+                             continue
+                 except:
+                     pass # If fallback also fails, return original error
+             
+             return {"Exchange": exchange_id.title(), "Error": error_str}
              
     except Exception as e:
         return {"Exchange": exchange_id.title(), "Error": str(e)}
